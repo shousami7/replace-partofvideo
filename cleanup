@@ -1,0 +1,73 @@
+#!/bin/bash
+# Quick cleanup aliases for common operations
+
+case "${1:-help}" in
+    all)
+        # Delete all sessions with confirmation
+        ./clean.sh -a
+        ;;
+    all-force)
+        # Delete all sessions without confirmation
+        ./clean.sh -a -y
+        ;;
+    keep3)
+        # Keep latest 3 sessions
+        ./clean.sh -k 3
+        ;;
+    keep5)
+        # Keep latest 5 sessions
+        ./clean.sh -k 5
+        ;;
+    keep10)
+        # Keep latest 10 sessions
+        ./clean.sh -k 10
+        ;;
+    quick)
+        # Quick cleanup: keep latest 3, no confirmation
+        ./clean.sh -k 3 -y
+        ;;
+    status)
+        # Show current sessions
+        echo "📊 Current sessions in runs/:"
+        echo ""
+        if [ -d "runs" ] && [ "$(ls -A runs 2>/dev/null)" ]; then
+            session_count=$(find runs -mindepth 1 -maxdepth 1 -type d ! -name "latest" | wc -l | tr -d ' ')
+            echo "  Total sessions: $session_count"
+            echo ""
+            echo "  Sessions (sorted by date):"
+            find runs -mindepth 1 -maxdepth 1 -type d ! -name "latest" -exec stat -f "%Sm %N" -t "%Y-%m-%d %H:%M:%S" {} \; | sort -r | while read -r line; do
+                timestamp=$(echo "$line" | cut -d' ' -f1-2)
+                path=$(echo "$line" | cut -d' ' -f3-)
+                session_name=$(basename "$path")
+                echo "    - $session_name ($timestamp)"
+            done
+            echo ""
+            total_size=$(du -sh runs 2>/dev/null | cut -f1)
+            echo "  Total size: $total_size"
+        else
+            echo "  No sessions found"
+        fi
+        ;;
+    help|*)
+        echo "🧹 Quick Cleanup Commands"
+        echo ""
+        echo "Usage: $0 <command>"
+        echo ""
+        echo "Commands:"
+        echo "  status      Show current sessions and disk usage"
+        echo "  keep3       Keep latest 3 sessions (with confirmation)"
+        echo "  keep5       Keep latest 5 sessions (with confirmation)"
+        echo "  keep10      Keep latest 10 sessions (with confirmation)"
+        echo "  quick       Quick cleanup: keep latest 3 (no confirmation)"
+        echo "  all         Delete all sessions (with confirmation)"
+        echo "  all-force   Delete all sessions (no confirmation)"
+        echo "  help        Show this help message"
+        echo ""
+        echo "Examples:"
+        echo "  $0 status     # Check current sessions"
+        echo "  $0 quick      # Quick cleanup"
+        echo "  $0 keep5      # Keep 5 latest sessions"
+        echo ""
+        echo "For advanced options, use: ./clean.sh -h"
+        ;;
+esac

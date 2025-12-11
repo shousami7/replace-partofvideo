@@ -4,6 +4,7 @@
 # Temporary files
 tmp/
 output/
+runs/
 
 # macOS
 .DS_Store

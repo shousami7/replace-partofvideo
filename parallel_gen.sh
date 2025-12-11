@@ -94,9 +94,9 @@ update_img() {
     local success=false
     
     while [ $retry_count -lt $max_retries ] && [ "$success" = false ]; do
-        # Perform API call
+        # Perform API call with correct model endpoint
         response=$(generate_payload $img_id | curl -s -w "\n%{http_code}" -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent" \
             -H "x-goog-api-key: $GEMINI_API_KEY" \
             -H "Content-Type: application/json" \
             -d @-)
@@ -106,24 +106,42 @@ update_img() {
         body=$(echo "$response" | sed '$d')
         
         if [ "$http_code" = "200" ]; then
-            # Extract image data and save using jq for robust JSON parsing
-            echo "$body" | jq -r '.candidates[0].content.parts[].inline_data.data // empty' | base64 --decode > "$OUT_DIR/frame_$img_id.png"
+            # Check if response contains image data
+            # Note: Gemini API returns inlineData (camelCase), not inline_data
+            image_data=$(echo "$body" | jq -r '.candidates[0].content.parts[].inlineData.data // empty')
             
-            # Validate file is non-empty
-            if [ -s "$OUT_DIR/frame_$img_id.png" ]; then
-                success=true
-                echo "✓ Frame $img_id completed"
+            if [ -n "$image_data" ]; then
+                # Decode and save image
+                echo "$image_data" | base64 --decode > "$OUT_DIR/frame_$img_id.png"
+                
+                # Validate file is non-empty
+                if [ -s "$OUT_DIR/frame_$img_id.png" ]; then
+                    success=true
+                    echo "✓ Frame $img_id completed"
+                else
+                    echo "⚠ Frame $img_id: Decoded image is empty, retrying..."
+                    retry_count=$((retry_count + 1))
+                    sleep 2
+                fi
             else
-                echo "⚠ Frame $img_id: Empty response, retrying..."
+                # No image data - check if API refused the request
+                error_text=$(echo "$body" | jq -r '.candidates[0].content.parts[0].text // "Unknown error"')
+                echo "⚠ Frame $img_id: No image data in response - $error_text"
+                
+                # Log full response for debugging
+                if [ $retry_count -eq 0 ]; then
+                    echo "$body" | jq '.' >> "$session_dir/tmp/api_errors.log" 2>&1 || echo "$body" >> "$session_dir/tmp/api_errors.log"
+                fi
+                
                 retry_count=$((retry_count + 1))
                 sleep 2
             fi
         
         elif [ "$http_code" = "429" ]; then
             # Rate limited — use extended backoff
-            echo "⚠ Frame $img_id: Rate limited (429), waiting 10s..."
+            echo "⚠ Frame $img_id: Rate limited (429), waiting 15s..."
             retry_count=$((retry_count + 1))
-            sleep 10
+            sleep 15
         
         else
             # Generic error with exponential backoff
@@ -142,7 +160,8 @@ update_img() {
 }
 
 # Maximum parallel jobs to prevent API rate limiting and system overload
-MAX_JOBS=6
+# Reduced to 3 to minimize 429 errors from Gemini API
+MAX_JOBS=3
 
 for i in $(seq -f "%05g" 1 "$number"); do
     # Wait if we've reached the max parallel job limit

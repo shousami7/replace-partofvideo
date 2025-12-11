@@ -97,6 +97,43 @@ ffmpeg -i tmp/before_replace.mp4 -i output/video1.mp4 -i tmp/after_replace.mp4 \
   -map "[outv]" final_output.mp4
 ```
 
+## クリーンアップコマンド
+
+`runs/` ディレクトリに溜まった動画処理セッションをクリーンアップするためのコマンドが用意されています。
+
+### 簡単なクリーンアップ（推奨）
+
+```bash
+# 現在のセッション状況を確認
+./cleanup status
+
+# 最新の3つのセッションを残して古いものを削除（確認あり）
+./cleanup keep3
+
+# クイッククリーンアップ（最新3つを残す、確認なし）
+./cleanup quick
+
+# すべてのセッションを削除（確認あり）
+./cleanup all
+```
+
+### 詳細なクリーンアップオプション
+
+```bash
+# 最新のN個のセッションを残して削除
+./clean.sh -k 5        # 最新5つを残す（確認あり）
+./clean.sh -k 10 -y    # 最新10個を残す（確認なし）
+
+# すべてのセッションを削除
+./clean.sh -a          # 確認あり
+./clean.sh -a -y       # 確認なし
+
+# 特定のセッションを削除
+./clean.sh -d runs/20251211_163422
+```
+
+詳しい使い方は `CLEANUP_GUIDE.md` を参照してください。
+
 ## ディレクトリ構造
 
 ```
@@ -105,8 +142,13 @@ replace-partofvideo/
 ├── generate.sh          # 単一フレーム編集スクリプト
 ├── parallel_gen.sh      # 並列フレーム編集スクリプト
 ├── concatenate.sh       # 動画結合スクリプト
+├── clean.sh             # クリーンアップスクリプト
+├── cleanup              # クイッククリーンアップコマンド
 ├── .env                 # API キー（Git管理外）
 ├── .env.example         # 環境変数のテンプレート
+├── runs/                # セッション管理ディレクトリ（Git管理外）
+│   ├── 20251211_185724/ # セッションディレクトリ（タイムスタンプ）
+│   └── latest/          # 最新セッションへのシンボリックリンク
 ├── tmp/                 # 一時ファイル（Git管理外）
 │   ├── frames/          # 元のフレーム
 │   ├── before_replace.mp4

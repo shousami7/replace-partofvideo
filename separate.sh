@@ -26,6 +26,12 @@ parse_time_to_seconds() {
     fi
 }
 
+# Format decimal seconds for ffmpeg (adds leading zero and limits precision)
+format_seconds() {
+    local value="$1"
+    awk -v val="$value" 'BEGIN { printf "%.6f", val }'
+}
+
 # Parse command-line arguments
 session_dir=""
 while getopts "i:s:e:f:d:" opt; do
@@ -90,13 +96,16 @@ if [ "$(echo "$duration > 0" | bc -l)" -ne 1 ]; then
     exit 1
 fi
 
-echo "Time range: $start to $end (duration: ${duration}s)"
+duration_fmt=$(format_seconds "$duration")
+echo "Time range: $start to $end (duration: ${duration_fmt}s)"
 
 # Split video into three parts
 # Use re-encoding to prevent video stream loss issues
-ffmpeg -i "$input" -to "$start_sec" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/before_replace.mp4"
-ffmpeg -i "$input" -ss "$start_sec" -t "$duration" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/for_replace.mp4"
-ffmpeg -i "$input" -ss "$end_sec" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/after_replace.mp4"
+start_sec_fmt=$(format_seconds "$start_sec")
+end_sec_fmt=$(format_seconds "$end_sec")
+ffmpeg -i "$input" -to "$start_sec_fmt" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/before_replace.mp4"
+ffmpeg -i "$input" -ss "$start_sec_fmt" -t "$duration_fmt" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/for_replace.mp4"
+ffmpeg -i "$input" -ss "$end_sec_fmt" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/after_replace.mp4"
 
 # Extract frames at specified fps and save fps value for concatenation
 ffmpeg -i "$session_dir/tmp/for_replace.mp4" -vf "fps=$fps" "$session_dir/tmp/frames/frame_%05d.png"
