@@ -8,10 +8,22 @@ command -v jq >/dev/null 2>&1 || { echo "Error: jq not found. Please install jq.
 # Robust shell flags
 set -euo pipefail
 
-# Function to convert HH:MM:SS to seconds
-hms_to_seconds() {
-    IFS=':' read -r h m s <<< "$1"
-    echo "$((10#$h * 3600 + 10#$m * 60 + 10#$s))"
+# Convert inputs such as "HH:MM:SS", "MM:SS", or plain seconds (including decimals) to seconds
+parse_time_to_seconds() {
+    local time_input="$1"
+    if [[ "$time_input" == *:* ]]; then
+        IFS=':' read -r h m s <<< "$time_input"
+        h=${h:-0}
+        m=${m:-0}
+        s=${s:-0}
+        echo "$(echo "$h * 3600 + $m * 60 + $s" | bc -l)"
+    else
+        if ! [[ "$time_input" =~ ^([0-9]+(\.[0-9]+)?|\.[0-9]+)$ ]]; then
+            echo "Error: Invalid time format '$time_input'. Use HH:MM:SS or seconds (optionally decimal)." >&2
+            exit 1
+        fi
+        echo "$time_input"
+    fi
 }
 
 # Parse command-line arguments
@@ -63,14 +75,14 @@ echo "Session directory: $session_dir"
 echo "fps: $fps"
 
 # Convert start and end times to seconds
-start_sec=$(hms_to_seconds "$start")
-end_sec=$(hms_to_seconds "$end")
+start_sec=$(parse_time_to_seconds "$start")
+end_sec=$(parse_time_to_seconds "$end")
 
-# Calculate duration in seconds
-duration=$((end_sec - start_sec))
+# Calculate duration in seconds (supports decimals)
+duration=$(echo "$end_sec - $start_sec" | bc -l)
 
 # Validate duration
-if [ "$duration" -le 0 ]; then
+if [ "$(echo "$duration > 0" | bc -l)" -ne 1 ]; then
     echo "Error: Invalid time range. Duration must be positive (end > start)"
     echo "  start: $start ($start_sec seconds)"
     echo "  end: $end ($end_sec seconds)"
@@ -82,9 +94,9 @@ echo "Time range: $start to $end (duration: ${duration}s)"
 
 # Split video into three parts
 # Use re-encoding to prevent video stream loss issues
-ffmpeg -i "$input" -to "$start" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/before_replace.mp4"
-ffmpeg -i "$input" -ss "$start" -t "$duration" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/for_replace.mp4"
-ffmpeg -i "$input" -ss "$end" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/after_replace.mp4"
+ffmpeg -i "$input" -to "$start_sec" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/before_replace.mp4"
+ffmpeg -i "$input" -ss "$start_sec" -t "$duration" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/for_replace.mp4"
+ffmpeg -i "$input" -ss "$end_sec" -c:v libx264 -c:a aac -strict -2 "$session_dir/tmp/after_replace.mp4"
 
 # Extract frames at specified fps and save fps value for concatenation
 ffmpeg -i "$session_dir/tmp/for_replace.mp4" -vf "fps=$fps" "$session_dir/tmp/frames/frame_%05d.png"
