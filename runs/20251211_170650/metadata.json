@@ -1,0 +1,13 @@
+{
+  "session_id": "20251211_170650",
+  "created_at": "2025-12-11T08:06:57+0000",
+  "input_video": "input.mp4",
+  "start_time": "00:00:03",
+  "end_time": "00:00:04",
+  "fps": 24,
+  "prompt": "Hello from TRC",
+  "model_version": "gemini-2.5-flash-image",
+  "status": "frames_generated",
+  "total_frames": 24,
+  "failed_frames": []
+}

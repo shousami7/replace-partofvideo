@@ -1,11 +1,43 @@
 #!/bin/bash
 
+# Dependency validation
+command -v curl >/dev/null 2>&1 || { echo "Error: curl not found. Please install curl."; exit 1; }
+command -v base64 >/dev/null 2>&1 || { echo "Error: base64 not found. Please install base64."; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "Error: jq not found. Please install jq."; exit 1; }
+
+# Robust shell flags
+set -euo pipefail
+
 source .env
 
-IMG_PATH=$PWD/tmp/frames/frame_00001.png
-OUT_DIR=$PWD/output/frames
+# Parse command-line arguments
+session_dir=""
+while getopts "t:d:" opt; do
+    case $opt in
+        t)
+            text=$OPTARG;;
+        d)
+            session_dir=$OPTARG;;
+        \?)
+            echo "Usage: $0 -d <session_dir> -t <prompt text>"
+            echo "Invalid option: -$OPTARG"
+            exit 1
+            ;;
+    esac
+done
 
-mkdir -p $OUT_DIR
+# Validate session directory is provided
+if [ -z "$session_dir" ]; then
+    echo "Error: Session directory (-d) is required"
+    echo "Usage: $0 -d <session_dir> -t <prompt text>"
+    exit 1
+fi
+
+# Set up paths
+IMG_PATH="$session_dir/tmp/frames/frame_00001.png"
+OUT_DIR="$session_dir/output/frames"
+
+mkdir -p "$OUT_DIR"
 
 if [[ "$(base64 --version 2>&1)" = *"FreeBSD"* ]]; then
   B64FLAGS="--input"
@@ -15,18 +47,11 @@ fi
 
 IMG_BASE64=$(base64 "$B64FLAGS" "$IMG_PATH" 2>&1)
 
-while getopts "t:" opt; do
-    case $opt in
-        t)
-            text=$OPTARG;;
-    esac
-done
-
 if [ -z "$text" ]; then
     text="Please add a subtitle saying, no subtitle specified"
 fi
 
-echo $text
+echo "$text"
 
 generate_payload() {
   cat <<EOF
@@ -50,4 +75,4 @@ generate_payload | curl -X POST \
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent" \
   -H "x-goog-api-key: $GEMINI_API_KEY" \
   -H "Content-Type: application/json" \
-  -d @- | grep -o '"data": "[^"]*"' | cut -d'"' -f4 | base64 --decode > $OUT_DIR/frame_00001.png
+  -d @- | jq -r '.candidates[0].content.parts[].inline_data.data // empty' | base64 --decode > "$OUT_DIR/frame_00001.png"

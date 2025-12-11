@@ -1,43 +1,17 @@
 #!/bin/bash
 
-# Dependency validation
-command -v curl >/dev/null 2>&1 || { echo "Error: curl not found. Please install curl."; exit 1; }
-command -v base64 >/dev/null 2>&1 || { echo "Error: base64 not found. Please install base64."; exit 1; }
-command -v jq >/dev/null 2>&1 || { echo "Error: jq not found. Please install jq."; exit 1; }
-
-# Robust shell flags
-set -euo pipefail
-
 source .env
 
+OUT_DIR="$PWD/output/frames"
+mkdir -p "$OUT_DIR"
+
 # Parse command-line arguments
-session_dir=""
-while getopts "t:n:d:" opt; do
+while getopts "t:" opt; do
     case $opt in
         t)
             text=$OPTARG;;
-        n)
-            number=$OPTARG;;
-        d)
-            session_dir=$OPTARG;;
-        \?)
-            echo "Usage: $0 -d <session_dir> -t <prompt text> -n <number of frames>"
-            echo "Invalid option: -$OPTARG"
-            exit 1
-            ;;
     esac
 done
-
-# Validate session directory is provided
-if [ -z "$session_dir" ]; then
-    echo "Error: Session directory (-d) is required"
-    echo "Usage: $0 -d <session_dir> -t <prompt text> -n <number of frames>"
-    exit 1
-fi
-
-# Set up directories
-OUT_DIR="$session_dir/output/frames"
-mkdir -p "$OUT_DIR"
 
 if [[ "$(base64 --version 2>&1)" = *"FreeBSD"* ]]; then
   B64FLAGS="--input"
@@ -59,26 +33,25 @@ IMPORTANT INSTRUCTIONS FOR CONSISTENCY:
 - Maintain pixel-perfect consistency across ALL frames
 "
 
-
 generate_payload() {
     local img_id="$1"
-    IMG_PATH="$session_dir/tmp/frames/frame_$img_id.png"
+    IMG_PATH="$PWD/tmp/frames/frame_$img_id.png"
     IMG_BASE64=$(base64 "$B64FLAGS" "$IMG_PATH" 2>&1)
     
-    # Pass base64 image via stdin to avoid ARG_MAX overflow
-    # printf pipes the base64 string into jq, which reads it via 'input'
-    printf '%s' "$IMG_BASE64" | jq -R -n \
+    # Use jq to safely construct JSON, properly escaping all special characters
+    jq -n \
         --arg text "$enhanced_text" \
+        --arg img "$IMG_BASE64" \
         '{
             contents: [{
                 parts: [
+                    { text: $text },
                     {
                         inline_data: {
                             mime_type: "image/png",
-                            data: input
+                            data: $img
                         }
-                    },
-                    { text: $text }
+                    }
                 ]
             }],
             generationConfig: {
@@ -136,37 +109,53 @@ update_img() {
     # Final failure handling
     if [ "$success" = false ]; then
         echo "✗ Frame $img_id: FAILED after $max_retries retries"
-        echo "$img_id" >> "$session_dir/tmp/failed_frames.txt"
         return 1
     fi
 }
 
-# Maximum parallel jobs to prevent API rate limiting and system overload
+# Check if failed_frames.txt exists
+if [ ! -f "$PWD/tmp/failed_frames.txt" ]; then
+    echo "No failed frames found. Nothing to retry."
+    exit 0
+fi
+
+# Count failed frames
+failed_count=$(wc -l < "$PWD/tmp/failed_frames.txt")
+echo "Found $failed_count failed frame(s) to retry"
+
+# Create backup of failed frames list
+cp "$PWD/tmp/failed_frames.txt" "$PWD/tmp/failed_frames_backup.txt"
+
+# Clear the failed frames file for this retry run
+> "$PWD/tmp/failed_frames.txt"
+
+# Maximum parallel jobs
 MAX_JOBS=6
 
-for i in $(seq -f "%05g" 1 "$number"); do
+# Retry each failed frame
+while IFS= read -r img_id; do
+    # Skip empty lines
+    [ -z "$img_id" ] && continue
+    
     # Wait if we've reached the max parallel job limit
     while [ $(jobs -r | wc -l) -ge "$MAX_JOBS" ]; do
         sleep 0.3
     done
     
-    update_img "$i" &
-done
+    echo "Retrying frame $img_id..."
+    update_img "$img_id" &
+done < "$PWD/tmp/failed_frames_backup.txt"
+
 wait
 
-# Update metadata.json with prompt and status
-if [ -f "$session_dir/metadata.json" ]; then
-    # Read failed frames if any
-    failed_frames="[]"
-    if [ -f "$session_dir/tmp/failed_frames.txt" ]; then
-        failed_frames=$(jq -R -s -c 'split("\n") | map(select(length > 0))' < "$session_dir/tmp/failed_frames.txt")
-    fi
-    
-    jq --arg prompt "$text" \
-       --argjson failed "$failed_frames" \
-       '.prompt = $prompt | .status = "frames_generated" | .failed_frames = $failed' \
-       "$session_dir/metadata.json" > "$session_dir/metadata.json.tmp"
-    mv "$session_dir/metadata.json.tmp" "$session_dir/metadata.json"
-    
-    echo "✓ Updated metadata.json"
+# Report results
+if [ -s "$PWD/tmp/failed_frames.txt" ]; then
+    still_failed=$(wc -l < "$PWD/tmp/failed_frames.txt")
+    echo ""
+    echo "Retry complete. $still_failed frame(s) still failed."
+    echo "Check tmp/failed_frames.txt for remaining failures."
+else
+    echo ""
+    echo "✓ All frames successfully retried!"
+    rm -f "$PWD/tmp/failed_frames.txt" "$PWD/tmp/failed_frames_backup.txt"
 fi
