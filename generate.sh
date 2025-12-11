@@ -36,7 +36,7 @@ generate_payload() {
       {"text":"$text"},
       {
         "inline_data":{
-          "mime_type":"image/jpeg",
+          "mime_type":"image/png",
           "data":"$IMG_BASE64"
         }
       }
