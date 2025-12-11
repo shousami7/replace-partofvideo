@@ -8,10 +8,25 @@ command -v jq >/dev/null 2>&1 || { echo "Error: jq not found. Please install jq.
 # Robust shell flags
 set -euo pipefail
 
-# Function to convert HH:MM:SS to seconds
-hms_to_seconds() {
-    IFS=':' read -r h m s <<< "$1"
-    echo "$((10#$h * 3600 + 10#$m * 60 + 10#$s))"
+# Function to convert time to seconds (supports HH:MM:SS, MM:SS, or plain seconds including decimals)
+time_to_seconds() {
+    local input="$1"
+    # If no colon, treat as plain seconds (supports decimals like 1.5)
+    if [[ "$input" != *:* ]]; then
+        echo "$input"
+        return
+    fi
+    # Count colons to determine format
+    local colons="${input//[^:]/}"
+    if [ ${#colons} -eq 2 ]; then
+        # HH:MM:SS format
+        IFS=':' read -r h m s <<< "$input"
+        echo "$h * 3600 + $m * 60 + $s" | bc -l
+    elif [ ${#colons} -eq 1 ]; then
+        # MM:SS format
+        IFS=':' read -r m s <<< "$input"
+        echo "$m * 60 + $s" | bc -l
+    fi
 }
 
 # Parse command-line arguments
@@ -63,14 +78,14 @@ echo "Session directory: $session_dir"
 echo "fps: $fps"
 
 # Convert start and end times to seconds
-start_sec=$(hms_to_seconds "$start")
-end_sec=$(hms_to_seconds "$end")
+start_sec=$(time_to_seconds "$start")
+end_sec=$(time_to_seconds "$end")
 
-# Calculate duration in seconds
-duration=$((end_sec - start_sec))
+# Calculate duration in seconds (using bc for decimal support)
+duration=$(echo "$end_sec - $start_sec" | bc -l)
 
-# Validate duration
-if [ "$duration" -le 0 ]; then
+# Validate duration (compare with bc since duration may be decimal)
+if [ "$(echo "$duration <= 0" | bc -l)" -eq 1 ]; then
     echo "Error: Invalid time range. Duration must be positive (end > start)"
     echo "  start: $start ($start_sec seconds)"
     echo "  end: $end ($end_sec seconds)"
