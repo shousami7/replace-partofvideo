@@ -1,0 +1,16 @@
+# Environment variables
+.env
+
+# Temporary files
+tmp/
+output/
+
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
