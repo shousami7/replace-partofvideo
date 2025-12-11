@@ -43,11 +43,16 @@ fi
 
 echo "Using fps: $fps"
 
-# Step 1: Generate edited_segment.mp4 from frames
-echo "Generating edited segment from frames..."
+# Step 1: Select frames directory (prefer AI/output frames when available)
+frames_dir="$session_dir/output/frames"
+if ! compgen -G "$frames_dir/frame_*.png" >/dev/null; then
+    frames_dir="$session_dir/tmp/frames"
+fi
+
+echo "Generating edited segment from frames ($frames_dir)..."
 ffmpeg -y \
   -framerate "$fps" \
-  -i "$session_dir/tmp/frames/frame_%05d.png" \
+  -i "$frames_dir/frame_%05d.png" \
   -c:v libx264 \
   -pix_fmt yuv420p \
   -r "$fps" \
