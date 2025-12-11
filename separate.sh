@@ -11,19 +11,28 @@ set -euo pipefail
 # Convert inputs such as "HH:MM:SS", "MM:SS", or plain seconds (including decimals) to seconds
 parse_time_to_seconds() {
     local time_input="$1"
+    local result
     if [[ "$time_input" == *:* ]]; then
         IFS=':' read -r h m s <<< "$time_input"
         h=${h:-0}
         m=${m:-0}
         s=${s:-0}
-        echo "$(echo "$h * 3600 + $m * 60 + $s" | bc -l)"
+        result="$(echo "$h * 3600 + $m * 60 + $s" | bc -l)"
     else
         if ! [[ "$time_input" =~ ^([0-9]+(\.[0-9]+)?|\.[0-9]+)$ ]]; then
             echo "Error: Invalid time format '$time_input'. Use HH:MM:SS or seconds (optionally decimal)." >&2
             exit 1
         fi
-        echo "$time_input"
+        result="$time_input"
     fi
+
+    # Add leading zero if result starts with decimal point (e.g., .5 -> 0.5)
+    # This is required for ffmpeg compatibility
+    if [[ "$result" == .* ]]; then
+        result="0$result"
+    fi
+
+    echo "$result"
 }
 
 # Parse command-line arguments
@@ -80,6 +89,12 @@ end_sec=$(parse_time_to_seconds "$end")
 
 # Calculate duration in seconds (supports decimals)
 duration=$(echo "$end_sec - $start_sec" | bc -l)
+
+# Add leading zero if duration starts with decimal point (e.g., .5 -> 0.5)
+# This is required for ffmpeg compatibility
+if [[ "$duration" == .* ]]; then
+    duration="0$duration"
+fi
 
 # Validate duration
 if [ "$(echo "$duration > 0" | bc -l)" -ne 1 ]; then
