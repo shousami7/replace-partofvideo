@@ -96,7 +96,7 @@ update_img() {
     while [ $retry_count -lt $max_retries ] && [ "$success" = false ]; do
         # Perform API call
         response=$(generate_payload $img_id | curl -s -w "\n%{http_code}" -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.pro-image:generateContent" \
             -H "x-goog-api-key: $GEMINI_API_KEY" \
             -H "Content-Type: application/json" \
             -d @-)
