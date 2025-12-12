@@ -79,15 +79,35 @@ update_img() {
         body=$(echo "$response" | sed '$d')
         
         if [ "$http_code" = "200" ]; then
-            # Extract image data and save using jq for robust JSON parsing
-            echo "$body" | jq -r '.candidates[0].content.parts[].inline_data.data // empty' | base64 --decode > "$OUT_DIR/frame_$img_id.png"
-            
-            # Validate file is non-empty
-            if [ -s "$OUT_DIR/frame_$img_id.png" ]; then
-                success=true
-                echo "✓ Frame $img_id completed"
+            # Extract image data using jq for robust JSON parsing
+            # Note: Gemini API returns inlineData (camelCase)
+            image_data=$(echo "$body" | jq -r '.candidates[0].content.parts[].inlineData.data // empty' | head -n 1)
+
+            if [ -n "$image_data" ]; then
+                # Detect image format from base64 prefix
+                # JPEG starts with /9j/ (FF D8 FF in hex)
+                # PNG starts with iVBORw (89 50 4E 47 in hex)
+                if [[ "$image_data" == /9j/* ]]; then
+                    ext="jpg"
+                else
+                    ext="png"
+                fi
+
+                # Decode and save image with correct extension
+                echo "$image_data" | base64 --decode > "$OUT_DIR/frame_$img_id.$ext"
+
+                # Validate file is non-empty
+                if [ -s "$OUT_DIR/frame_$img_id.$ext" ]; then
+                    success=true
+                    echo "✓ Frame $img_id completed ($ext)"
+                else
+                    echo "⚠ Frame $img_id: Empty response, retrying..."
+                    rm -f "$OUT_DIR/frame_$img_id.$ext"
+                    retry_count=$((retry_count + 1))
+                    sleep 2
+                fi
             else
-                echo "⚠ Frame $img_id: Empty response, retrying..."
+                echo "⚠ Frame $img_id: No image data in response, retrying..."
                 retry_count=$((retry_count + 1))
                 sleep 2
             fi
