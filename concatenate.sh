@@ -47,6 +47,7 @@ echo "Using fps: $fps"
 echo "Generating edited segment from frames..."
 ffmpeg -y \
   -framerate "$fps" \
+  -start_number 1 \
   -i "$session_dir/tmp/frames/frame_%05d.png" \
   -c:v libx264 \
   -pix_fmt yuv420p \
