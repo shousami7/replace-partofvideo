@@ -52,11 +52,18 @@ seq_dir="$session_dir/tmp/seq_frames"
 rm -rf "$seq_dir"
 mkdir -p "$seq_dir"
 
-# Get all generated frames sorted numerically and create sequential symlinks
+# Get all generated frames sorted numerically (both .jpg and .png)
+# and create sequential symlinks preserving format
 frame_count=0
-for frame in $(ls -1 "$session_dir/output/frames"/frame_*.png 2>/dev/null | sort -V); do
+frame_ext=""
+for frame in $(ls -1 "$session_dir/output/frames"/frame_*.{jpg,png} 2>/dev/null | sort -V); do
     frame_count=$((frame_count + 1))
-    ln -sf "$frame" "$seq_dir/$(printf "frame_%05d.png" $frame_count)"
+    # Get the extension of the actual file
+    ext="${frame##*.}"
+    if [ -z "$frame_ext" ]; then
+        frame_ext="$ext"
+    fi
+    ln -sf "$frame" "$seq_dir/$(printf "frame_%05d.$ext" $frame_count)"
 done
 
 if [ "$frame_count" -eq 0 ]; then
@@ -64,12 +71,15 @@ if [ "$frame_count" -eq 0 ]; then
     exit 1
 fi
 
-echo "Found $frame_count frames, creating video..."
+# Default to png if no frames found (shouldn't happen)
+[ -z "$frame_ext" ] && frame_ext="png"
+
+echo "Found $frame_count frames ($frame_ext format), creating video..."
 
 ffmpeg -y \
   -framerate "$fps" \
   -start_number 1 \
-  -i "$seq_dir/frame_%05d.png" \
+  -i "$seq_dir/frame_%05d.$frame_ext" \
   -c:v libx264 \
   -pix_fmt yuv420p \
   -r "$fps" \

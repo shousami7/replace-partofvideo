@@ -78,10 +78,28 @@ generate_payload() {
 EOF
 }
 
-generate_payload | curl -X POST \
+# Get the response and extract image data
+image_data=$(generate_payload | curl -s -X POST \
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent" \
   -H "x-goog-api-key: $GEMINI_API_KEY" \
   -H "Content-Type: application/json" \
   -d @- \
-| jq -r '.candidates[0].content.parts[].inlineData.data // empty' | head -n 1 \
-| base64 --decode > "$OUT_DIR/frame_00001.png"
+| jq -r '.candidates[0].content.parts[].inlineData.data // empty' | head -n 1)
+
+if [ -n "$image_data" ]; then
+    # Detect image format from base64 prefix
+    # JPEG starts with /9j/ (FF D8 FF in hex)
+    # PNG starts with iVBORw (89 50 4E 47 in hex)
+    if [[ "$image_data" == /9j/* ]]; then
+        ext="jpg"
+    else
+        ext="png"
+    fi
+
+    # Decode and save image with correct extension
+    echo "$image_data" | base64 --decode > "$OUT_DIR/frame_00001.$ext"
+    echo "✓ Frame saved as frame_00001.$ext"
+else
+    echo "✗ No image data in response"
+    exit 1
+fi
