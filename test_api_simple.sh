@@ -48,7 +48,7 @@ payload=$(printf '%s' "$IMG_BASE64" | jq -R -n \
 # Make API call
 echo "Making API call..."
 response=$(echo "$payload" | curl -s -w "\n%{http_code}" -X POST \
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent" \
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent" \
     -H "x-goog-api-key: $GEMINI_API_KEY" \
     -H "Content-Type: application/json" \
     -d @-)

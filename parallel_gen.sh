@@ -82,6 +82,7 @@ generate_payload() {
                 ]
             }],
             generationConfig: {
+                responseModalities: ["TEXT", "IMAGE"],
                 imageConfig: { aspectRatio: "16:9" }
             }
         }'
@@ -96,7 +97,7 @@ update_img() {
     while [ $retry_count -lt $max_retries ] && [ "$success" = false ]; do
         # Perform API call with correct model endpoint
         response=$(generate_payload $img_id | curl -s -w "\n%{http_code}" -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent" \
             -H "x-goog-api-key: $GEMINI_API_KEY" \
             -H "Content-Type: application/json" \
             -d @-)
@@ -108,7 +109,11 @@ update_img() {
         if [ "$http_code" = "200" ]; then
             # Check if response contains image data
             # Note: Gemini API returns inlineData (camelCase), not inline_data
-            image_data=$(echo "$body" | jq -r '.candidates[0].content.parts[].inlineData.data // empty')
+            image_data=$(echo "$body" | jq -r '
+                .candidates[0].content.parts[]
+                | select(.inline_data and (.inline_data.mime_type | startswith("image/")))
+                | .inline_data.data // empty
+            ')
             
             if [ -n "$image_data" ]; then
                 # Decode and save image

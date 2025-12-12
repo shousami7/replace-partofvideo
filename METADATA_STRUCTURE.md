@@ -13,7 +13,7 @@ The `metadata.json` file is automatically created and updated throughout the vid
   "end_time": "10",
   "fps": 10,
   "prompt": "Add a subtitle saying 'Hello World'",
-  "model_version": "gemini-2.5-flash-image",
+  "model_version": "gemini-3-pro-image-preview",
   "status": "completed",
   "total_frames": 50,
   "failed_frames": []

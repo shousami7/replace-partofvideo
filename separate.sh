@@ -125,7 +125,7 @@ jq -n \
     --arg end "$end" \
     --argjson fps "$fps" \
     --argjson total_frames "$total_frames" \
-    --arg model_version "gemini-2.5-flash-image" \
+    --arg model_version "gemini-3-pro-image-preview" \
     '{
         session_id: $session_id,
         created_at: $created_at,
