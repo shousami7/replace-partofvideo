@@ -90,7 +90,7 @@ generate_payload() {
 
 update_img() {
     local img_id=$1
-    local max_retries=3
+    local max_retries=1
     local retry_count=0
     local success=false
     
@@ -109,11 +109,7 @@ update_img() {
         if [ "$http_code" = "200" ]; then
             # Check if response contains image data
             # Note: Gemini API returns inlineData (camelCase), not inline_data
-            image_data=$(echo "$body" | jq -r '
-                .candidates[0].content.parts[]
-                | select(.inline_data and (.inline_data.mime_type | startswith("image/")))
-                | .inline_data.data // empty
-            ')
+            image_data=$(echo "$body" | jq -r '.candidates[0].content.parts[].inlineData.data // empty' | head -n 1)
             
             if [ -n "$image_data" ]; then
                 # Decode and save image
@@ -130,7 +126,8 @@ update_img() {
                 fi
             else
                 # No image data - check if API refused the request
-                error_text=$(echo "$body" | jq -r '.candidates[0].content.parts[0].text // "Unknown error"')
+                error_text=$(echo "$body" | jq -r '.candidates[0].content.parts[].text // empty' | head -n 1)
+                [ -z "$error_text" ] && error_text="Unknown error"
                 echo "⚠ Frame $img_id: No image data in response - $error_text"
                 
                 # Log full response for debugging

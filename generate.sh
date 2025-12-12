@@ -83,9 +83,5 @@ generate_payload | curl -X POST \
   -H "x-goog-api-key: $GEMINI_API_KEY" \
   -H "Content-Type: application/json" \
   -d @- \
-| jq -r '
-    .candidates[0].content.parts[]
-    | select(.inline_data and (.inline_data.mime_type | startswith("image/")))
-    | .inline_data.data
-  ' \
+| jq -r '.candidates[0].content.parts[].inlineData.data // empty' | head -n 1 \
 | base64 --decode > "$OUT_DIR/frame_00001.png"
