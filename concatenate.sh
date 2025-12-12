@@ -43,12 +43,33 @@ fi
 
 echo "Using fps: $fps"
 
-# Step 1: Generate edited_segment.mp4 from frames
+# Step 1: Generate edited_segment.mp4 from AI-generated frames
+# Frames are in output/frames/ and may not be sequential (parallel processing)
 echo "Generating edited segment from frames..."
+
+# Create temp directory for sequential symlinks
+seq_dir="$session_dir/tmp/seq_frames"
+rm -rf "$seq_dir"
+mkdir -p "$seq_dir"
+
+# Get all generated frames sorted numerically and create sequential symlinks
+frame_count=0
+for frame in $(ls -1 "$session_dir/output/frames"/frame_*.png 2>/dev/null | sort -V); do
+    frame_count=$((frame_count + 1))
+    ln -sf "$frame" "$seq_dir/$(printf "frame_%05d.png" $frame_count)"
+done
+
+if [ "$frame_count" -eq 0 ]; then
+    echo "Error: No frames found in $session_dir/output/frames/"
+    exit 1
+fi
+
+echo "Found $frame_count frames, creating video..."
+
 ffmpeg -y \
   -framerate "$fps" \
   -start_number 1 \
-  -i "$session_dir/tmp/frames/frame_%05d.png" \
+  -i "$seq_dir/frame_%05d.png" \
   -c:v libx264 \
   -pix_fmt yuv420p \
   -r "$fps" \
