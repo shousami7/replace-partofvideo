@@ -4,6 +4,8 @@
 command -v curl >/dev/null 2>&1 || { echo "Error: curl not found. Please install curl."; exit 1; }
 command -v base64 >/dev/null 2>&1 || { echo "Error: base64 not found. Please install base64."; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "Error: jq not found. Please install jq."; exit 1; }
+command -v ffmpeg >/dev/null 2>&1 || { echo "Error: ffmpeg not found. Please install ffmpeg."; exit 1; }
+command -v ffprobe >/dev/null 2>&1 || { echo "Error: ffprobe not found. Please install ffprobe (part of ffmpeg)."; exit 1; }
 
 # Robust shell flags
 set -euo pipefail
@@ -35,6 +37,22 @@ if [ -z "$session_dir" ]; then
     exit 1
 fi
 
+# Detect target dimensions from the first extracted frame to keep output size consistent
+first_frame=$(ls -1 "$session_dir/tmp/frames"/frame_*.png 2>/dev/null | sort -V | head -n 1)
+if [ -z "$first_frame" ]; then
+    echo "Error: No source frames found in $session_dir/tmp/frames/"
+    exit 1
+fi
+
+dimensions=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$first_frame")
+if [ -z "$dimensions" ]; then
+    echo "Error: Unable to read frame dimensions from $first_frame"
+    exit 1
+fi
+
+TARGET_WIDTH=${dimensions%x*}
+TARGET_HEIGHT=${dimensions#*x}
+
 # Set up directories
 OUT_DIR="$session_dir/output/frames"
 mkdir -p "$OUT_DIR"
@@ -57,6 +75,7 @@ IMPORTANT INSTRUCTIONS FOR CONSISTENCY:
 - Use EXACTLY the same font color (white with a black outline)
 - Do NOT modify or alter the background image in any way except for adding the subtitle
 - Maintain pixel-perfect consistency across ALL frames
+- Preserve the original frame resolution (${TARGET_WIDTH}x${TARGET_HEIGHT}); avoid changing canvas size or aspect ratio
 "
 
 
@@ -82,8 +101,7 @@ generate_payload() {
                 ]
             }],
             generationConfig: {
-                responseModalities: ["TEXT", "IMAGE"],
-                imageConfig: { aspectRatio: "16:9" }
+                responseModalities: ["TEXT", "IMAGE"]
             }
         }'
 }
@@ -121,16 +139,27 @@ update_img() {
                     ext="png"
                 fi
 
+                raw_path="$OUT_DIR/frame_${img_id}_raw.$ext"
+                final_path="$OUT_DIR/frame_${img_id}.png"
+
                 # Decode and save image with correct extension
-                echo "$image_data" | base64 --decode > "$OUT_DIR/frame_$img_id.$ext"
+                echo "$image_data" | base64 --decode > "$raw_path"
+
+                # Resize/pad to original frame dimensions to preserve orientation/size
+                ffmpeg -y -loglevel error \
+                    -i "$raw_path" \
+                    -vf "scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=decrease,pad=${TARGET_WIDTH}:${TARGET_HEIGHT}:(ow-iw)/2:(oh-ih)/2" \
+                    "$final_path" || true
+
+                rm -f "$raw_path"
 
                 # Validate file is non-empty
-                if [ -s "$OUT_DIR/frame_$img_id.$ext" ]; then
+                if [ -s "$final_path" ]; then
                     success=true
-                    echo "✓ Frame $img_id completed ($ext)"
+                    echo "✓ Frame $img_id completed (scaled to ${TARGET_WIDTH}x${TARGET_HEIGHT})"
                 else
                     echo "⚠ Frame $img_id: Decoded image is empty, retrying..."
-                    rm -f "$OUT_DIR/frame_$img_id.$ext"
+                    rm -f "$final_path"
                     retry_count=$((retry_count + 1))
                     sleep 2
                 fi
